@@ -50,3 +50,4 @@ services:
       start_period: 120s
     restart: unless-stopped
 # deploy test
+# ssh test

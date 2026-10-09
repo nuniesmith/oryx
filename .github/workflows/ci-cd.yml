@@ -35,7 +35,7 @@ permissions:
 
 env:
   SERVER_NAME: oryx
-  PROJECT_PATH: oryx
+  PROJECT_PATH: /home/actions/oryx
 
 # A newer push used to CANCEL a deploy already running on the host, which can
 # leave it halfway through stopping and starting containers. Deploys now queue
@@ -80,6 +80,17 @@ jobs:
       # ======================================================================
       # DEPLOY VIA SSH
       # ======================================================================
+      - name: 📁 Bootstrap project directory
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            mkdir -p /home/actions/oryx
+            echo "✅ Project directory ready"
+
       - name: 🚀 Deploy via SSH
         id: deploy
         if: steps.tailscale.outputs.connected == 'true'
@@ -98,8 +109,8 @@ jobs:
 
             # Create project directory if it doesn't exist
             echo "📁 Ensuring project directory exists..."
-            mkdir -p $HOME/${{ env.PROJECT_PATH }}
-            cd $HOME/${{ env.PROJECT_PATH }}
+            mkdir -p ${{ env.PROJECT_PATH }}
+            cd ${{ env.PROJECT_PATH }}
 
             # Handle git repository setup
             if [ -d .git ] && git status >/dev/null 2>&1; then
@@ -113,9 +124,9 @@ jobs:
             else
               echo "📥 Cloning repository (first deployment)..."
               cd ~
-              rm -rf $HOME/${{ env.PROJECT_PATH }}
-              git clone https://github.com/${{ github.repository }}.git $HOME/${{ env.PROJECT_PATH }}
-              cd $HOME/${{ env.PROJECT_PATH }}
+              rm -rf ${{ env.PROJECT_PATH }}
+              git clone https://github.com/${{ github.repository }}.git ${{ env.PROJECT_PATH }}
+              cd ${{ env.PROJECT_PATH }}
               git checkout ${{ github.ref_name }}
             fi
 
@@ -162,7 +173,7 @@ jobs:
             set -euo pipefail
 
             # Action already cd's to PROJECT_PATH; use absolute path as safeguard
-            cd $HOME/${{ env.PROJECT_PATH }}
+            cd ${{ env.PROJECT_PATH }}
 
             # Every image must be in hand BEFORE anything stops: a failed pull
             # after the stack is down leaves the host with nothing running.
@@ -179,7 +190,7 @@ jobs:
             echo "✅ Deployment complete"
 
           post-deploy-command: |
-            cd $HOME/${{ env.PROJECT_PATH }}
+            cd ${{ env.PROJECT_PATH }}
             echo ""
             echo "📊 Service Status:"
             docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || docker ps --format "table {{.Names}}\t{{.Status}}"

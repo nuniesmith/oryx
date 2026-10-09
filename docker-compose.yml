@@ -23,8 +23,9 @@ x-logging: &default-logging
 services:
   crypto-bot:
     build:
-      # Dockerfile lives in the crypto repo; built fresh from main on deploy.
-      context: https://github.com/nuniesmith/crypto.git#main
+      # Dockerfile lives in the crypto repo. The repo is private, so a git-URL
+      # context can't authenticate — build from the local checkout instead.
+      context: /home/jordan/github/crypto
       dockerfile: Dockerfile
     image: crypto-bot:latest
     container_name: crypto-bot-live

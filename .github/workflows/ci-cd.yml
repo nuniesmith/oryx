@@ -98,7 +98,7 @@ jobs:
         with:
           host: ${{ secrets.ORYX_TAILSCALE_IP }}
           port: ${{ secrets.SSH_PORT || '22' }}
-          username: ${{ secrets.SSH_USER || 'jordan' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
           ssh-key: ${{ secrets.SSH_KEY }}
           project-path: ${{ env.PROJECT_PATH }}
           git-pull: false
@@ -214,7 +214,7 @@ jobs:
           containers: crypto-bot-live
           ssh-host: ${{ secrets.ORYX_TAILSCALE_IP }}
           ssh-port: ${{ secrets.SSH_PORT || '22' }}
-          ssh-user: ${{ secrets.SSH_USER || 'jordan' }}
+          ssh-user: ${{ secrets.SSH_USER || 'actions' }}
           ssh-key: ${{ secrets.SSH_KEY }}
           initial-delay: 150
           retry-count: 3

@@ -177,7 +177,20 @@ jobs:
 
             # Every image must be in hand BEFORE anything stops: a failed pull
             # after the stack is down leaves the host with nothing running.
-            echo "📥 Building crypto-bot image (Dockerfile from nuniesmith/crypto#main)..."
+            # Clone the crypto repo for the Docker build context.
+            if [ -d crypto/.git ]; then
+              echo "📥 Updating crypto repo..."
+              git -C crypto fetch origin && git -C crypto reset --hard origin/main
+            else
+              echo "📥 Cloning crypto repo..."
+              rm -rf crypto
+              if [ -n "${{ secrets.GH_TOKEN }}" ]; then
+                git clone https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/nuniesmith/crypto.git crypto
+              else
+                git clone https://github.com/nuniesmith/crypto.git crypto
+              fi
+            fi
+            echo "📥 Building crypto-bot image..."
             docker compose build --pull
             echo "✅ Image built"
 

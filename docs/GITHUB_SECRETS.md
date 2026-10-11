@@ -32,11 +32,13 @@ of the private key once it's in GitHub.
 |---|---|---|
 | `KRAKEN_API_KEY` | _(your Kraken key)_ | Same key the systemd bot uses today (`~/github/crypto/.env` on oryx) |
 | `KRAKEN_API_SECRET` | _(your Kraken secret)_ | Same secret — never commit it |
-| `DISCORD_WEBHOOK_URL` | _(your webhook URL)_ | Optional; daily/weekly/monthly reports. Leave unset to skip |
+| `DISCORD_WEBHOOK_URL` | _(your webhook URL)_ | Reserved for oryx deployment notifications (kept in `.env`, currently unused by the deploy) |
+| `CRYPTO_DISCORD_WEBHOOK_URL` | _(your webhook URL)_ | **Required for bot reports**; the crypto bot posts startup / daily / weekly / monthly snapshots here. Create a separate Discord webhook for crypto — do not reuse the oryx one |
 
 ## Checklist
 
 - [ ] All 6 infrastructure secrets set
 - [ ] `KRAKEN_API_KEY` + `KRAKEN_API_SECRET` set (deploy fails fast without them)
-- [ ] `DISCORD_WEBHOOK_URL` set (optional)
+- [ ] `DISCORD_WEBHOOK_URL` set (reserved for oryx deploys)
+- [ ] `CRYPTO_DISCORD_WEBHOOK_URL` set (bot reports — separate webhook from oryx)
 - [ ] Private deploy key removed from anywhere outside GitHub Secrets

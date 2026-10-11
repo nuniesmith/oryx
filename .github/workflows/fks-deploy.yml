@@ -212,11 +212,12 @@ jobs:
               echo "  ✓ $v"
             done
 
-            # Images build on oryx from the fks repo (day one; GHCR prebuild
-            # is a follow-up). Every image in hand BEFORE anything restarts.
-            echo "🔨 Building FKS images (slow on first run)..."
-            docker compose -f docker-compose.oryx.yml build
-            echo "✅ Images built"
+            # Images are prebuilt in CI (publish-images.yml) and pushed to GHCR —
+            # oryx only pulls, never compiles (the SSH session can't survive
+            # a 20-image build). Every image in hand BEFORE anything restarts.
+            echo "📥 Pulling FKS images from GHCR..."
+            docker compose -f docker-compose.oryx.yml pull
+            echo "✅ Images pulled"
 
             echo "🚀 Starting FKS stack..."
             docker compose -f docker-compose.oryx.yml up -d --remove-orphans

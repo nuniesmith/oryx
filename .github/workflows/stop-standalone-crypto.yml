@@ -1,0 +1,43 @@
+# One-off: stop the standalone crypto-bot-live container on oryx.
+# The Kraken bot now runs as the spawner-managed `crypto-regime` bot in the
+# FKS stack. This retires the standalone so two live bots never trade the
+# same account. Idempotent — safe to run multiple times.
+#
+# Dispatch manually via "Run workflow". Does NOT remove the service from
+# docker-compose.yml (kept as a stopped rollback option).
+
+name: Stop standalone crypto bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stop-crypto:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔌 Connect to Tailscale
+        id: tailscale
+        uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          target-ip: ${{ secrets.ORYX_TAILSCALE_IP }}
+          target-ssh-port: ${{ secrets.SSH_PORT || '22' }}
+
+      - name: 🛑 Stop crypto-bot-live on oryx
+        if: steps.tailscale.outputs.connected == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "🛑 Stopping standalone crypto-bot-live (if running)..."
+            docker stop crypto-bot-live 2>/dev/null && echo "  ✓ stopped" || echo "  (not running)"
+            # Prevent auto-restart; keep the container as a stopped rollback.
+            docker update --restart=no crypto-bot-live 2>/dev/null || true
+            echo "📋 Crypto containers now:"
+            docker ps -a --filter "name=crypto" --format "{{.Names}}: {{.Status}}"
+            echo "📋 Spawner-managed bot containers:"
+            docker ps --filter "name=crypto-regime" --format "{{.Names}}: {{.Status}}"

@@ -212,6 +212,13 @@ jobs:
               echo "  ✓ $v"
             done
 
+            # alertmanager.yml is generated from its template at deploy time
+            # (the template carries no secrets — webhook URLs live on the
+            # alertmanager-discord sidecar's environment).
+            echo "📋 Rendering alertmanager.yml from template..."
+            cp infrastructure/config/alertmanager/alertmanager.yml.tmpl \
+               infrastructure/config/alertmanager/alertmanager.yml
+
             # Images are prebuilt in CI (publish-images.yml) and pushed to GHCR —
             # oryx only pulls, never compiles (the SSH session can't survive
             # a 20-image build). Every image in hand BEFORE anything restarts.

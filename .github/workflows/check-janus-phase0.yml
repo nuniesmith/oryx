@@ -1,0 +1,68 @@
+# Diagnostic: Janus Phase 0 checks on oryx (read-only).
+# Answers the scoping questions for the Janus <-> crypto bot integration:
+#   - Is the fks_janus container up, what binary/entrypoint does it run?
+#   - Are the expected ports listening (8080 http, 8180 brain, 50051/50052 grpc)?
+#   - Brain REST health on :7001, HTTP health on :7000
+#   - Is the regime bridge producing states (Redis stream janus:regime:bridge)?
+#   - Log evidence of the forward loop / regime bridge / brain startup
+#   - API token presence (set or not — values are NEVER printed)
+#   - The crypto bot's state.json regime flags (bridge input side)
+#
+# Dispatch manually via "Run workflow".
+
+name: Check Janus Phase 0 on oryx
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-janus:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔌 Connect to Tailscale
+        id: tailscale
+        uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          target-ip: ${{ secrets.ORYX_TAILSCALE_IP }}
+          target-ssh-port: ${{ secrets.SSH_PORT || '22' }}
+
+      - name: 🔍 Run Janus Phase 0 checks on oryx
+        if: steps.tailscale.outputs.connected == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "=== Janus container ==="
+            docker ps --filter "name=fks_janus" --format "{{.Names}}: {{.Status}} ({{.Image}})"
+            echo ""
+            echo "=== Janus entrypoint / cmd ==="
+            docker inspect fks_janus --format "Entrypoint: {{.Config.Entrypoint}} | Cmd: {{.Config.Cmd}}"
+            echo ""
+            echo "=== Listening TCP ports inside janus container ==="
+            docker exec fks_janus sh -c "ss -tln 2>/dev/null || netstat -tln 2>/dev/null || echo 'no ss/netstat in image'"
+            echo ""
+            echo "=== Brain REST health (:7001 /api/v1/brain/health) ==="
+            curl -s --max-time 10 http://127.0.0.1:7001/api/v1/brain/health || echo "BRAIN HEALTH FAILED"
+            echo ""
+            echo "=== Janus HTTP health (:7000 /health) ==="
+            curl -s --max-time 10 http://127.0.0.1:7000/health || echo "HTTP HEALTH FAILED"
+            echo ""
+            echo "=== Regime bridge Redis stream length (janus:regime:bridge) ==="
+            docker exec fks_redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning XLEN janus:regime:bridge' 2>/dev/null || echo "REDIS XLEN FAILED"
+            echo ""
+            echo "=== API token presence (values never printed) ==="
+            docker exec fks_janus sh -c 'for v in BRAIN_API_TOKEN JANUS_API_TOKEN; do eval "val=\${$v:-}"; if [ -n "$val" ]; then echo "$v: SET"; else echo "$v: not set"; fi; done'
+            echo ""
+            echo "=== Janus logs, last 24h: regime/forward/bridge/brain lines ==="
+            docker logs fks_janus --since 24h 2>&1 | grep -iE "regime|forward|bridge|brain|watchdog|grpc|listening|started" | tail -40
+            echo ""
+            echo "=== Janus logs: last 15 lines overall ==="
+            docker logs fks_janus --tail 15 2>&1
+            echo ""
+            echo "=== Crypto bot state.json (first 1500 chars) ==="
+            docker exec fks-bot-crypto-regime sh -c "head -c 1500 /var/lib/fks-bot/state.json 2>/dev/null" || echo "STATE READ FAILED"

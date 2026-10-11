@@ -1,0 +1,53 @@
+# Diagnostic: check fks.7gram.xyz reachability from oryx (over Tailscale).
+# Verifies DNS, HTTP/HTTPS response, and whether it hits the FKS nginx.
+# Also reports the spawner-managed crypto bot status.
+#
+# Dispatch manually via "Run workflow".
+
+name: Check fks.7gram.xyz from oryx
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-domain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔌 Connect to Tailscale
+        id: tailscale
+        uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          target-ip: ${{ secrets.ORYX_TAILSCALE_IP }}
+          target-ssh-port: ${{ secrets.SSH_PORT || '22' }}
+
+      - name: 🔍 Check fks.7gram.xyz from oryx
+        if: steps.tailscale.outputs.connected == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "=== DNS resolution ==="
+            getent hosts fks.7gram.xyz || nslookup fks.7gram.xyz || dig +short fks.7gram.xyz
+            echo ""
+            echo "=== HTTP (port 80) ==="
+            curl -s -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" --max-time 10 http://fks.7gram.xyz/ || echo "HTTP failed"
+            echo ""
+            echo "=== HTTPS (port 443) ==="
+            curl -s -o /dev/null -w "HTTPS %{http_code} in %{time_total}s\n" --max-time 10 https://fks.7gram.xyz/ || echo "HTTPS failed"
+            echo ""
+            echo "=== Response headers (HTTP) ==="
+            curl -s -I --max-time 10 http://fks.7gram.xyz/ | head -10 || echo "No headers"
+            echo ""
+            echo "=== FKS nginx container ==="
+            docker ps --filter "name=fks_nginx" --format "{{.Names}}: {{.Status}}"
+            echo ""
+            echo "=== Spawner-managed crypto bot ==="
+            docker ps --filter "name=crypto-regime" --format "{{.Names}}: {{.Status}}"
+            echo ""
+            echo "=== Spawner health ==="
+            curl -sf http://127.0.0.1:8091/health || echo "Spawner health check failed"

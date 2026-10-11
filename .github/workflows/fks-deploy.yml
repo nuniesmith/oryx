@@ -182,6 +182,9 @@ jobs:
             upsert_env ALLOWED_BOT_IMAGE_PREFIX "ghcr.io/nuniesmith/"
             upsert_env REQUIRE_INTERNAL_TOKEN "true"
             upsert_env EXECUTION_MODE "paper_trading"
+            # Janus starts its processing services at boot (forward loop,
+            # regime bridge). Paper mode + execution disabled stay as-is.
+            upsert_env JANUS_AUTO_START "true"
             upsert_env TZ "America/Toronto"
             upsert_env JANUS_REF "${{ vars.JANUS_REF || 'main' }}"
             upsert_env SPAWNER_REF "${{ vars.SPAWNER_REF || 'main' }}"

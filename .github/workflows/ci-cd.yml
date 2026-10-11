@@ -145,6 +145,7 @@ jobs:
             upsert_env KRAKEN_API_KEY "${{ secrets.KRAKEN_API_KEY }}"
             upsert_env KRAKEN_API_SECRET "${{ secrets.KRAKEN_API_SECRET }}"
             upsert_env DISCORD_WEBHOOK_URL "${{ secrets.DISCORD_WEBHOOK_URL }}"
+            upsert_env CRYPTO_DISCORD_WEBHOOK_URL "${{ secrets.CRYPTO_DISCORD_WEBHOOK_URL }}"
             upsert_env CRYPTO_BOT_ROOT "/app"
             chmod 600 .env
 

@@ -1,9 +1,14 @@
 # Docker Compose for ORYX - Crypto Bot host
 # ============================================================================
 # Oryx runs the Kraken crypto-bot (daily 200-day MA regime rule) as a Docker
-# service. The bot's Dockerfile lives in the nuniesmith/crypto repo; this
-# compose file builds it straight from that repo's git URL so the oryx repo
-# stays service-level only (same split as freddy/sullivan/princess).
+# service. The image is built by the nuniesmith/crypto repo's CI
+# (docker-publish.yml) and pushed to ghcr.io/nuniesmith/crypto — this host
+# only pulls it, so no Rust toolchain is needed here and deploys are fast.
+#
+# Deploy flow: the oryx CI/CD (triggered by push to oryx main or manual
+# dispatch) runs `docker compose pull` then recreates the container.
+# .env (KRAKEN_API_KEY, KRAKEN_API_SECRET, DISCORD_WEBHOOK_URL) is written by
+# the CI/CD from GitHub Actions secrets on every deploy.
 #
 # First deploy: copy the live state.json from the systemd deploy so order
 # tracking and history carry over:
@@ -22,12 +27,8 @@ x-logging: &default-logging
 
 services:
   crypto-bot:
-    build:
-      # Dockerfile lives in the crypto repo; the CI/CD clones it to ./crypto
-      # before building (GH_TOKEN secret if the repo is private).
-      context: ./crypto
-      dockerfile: Dockerfile
-    image: crypto-bot:latest
+    # Prebuilt by crypto CI; the deploy pulls, never builds.
+    image: ghcr.io/nuniesmith/crypto:latest
     container_name: crypto-bot-live
     env_file:
       - .env # KRAKEN_API_KEY, KRAKEN_API_SECRET, DISCORD_WEBHOOK_URL (written by CI/CD)
@@ -49,11 +50,3 @@ services:
       retries: 3
       start_period: 120s
     restart: unless-stopped
-# deploy test
-# ssh test
-# kraken keys set
-# public crypto
-# rebuild fix
-# autostart
-# forecast update
-# nav update

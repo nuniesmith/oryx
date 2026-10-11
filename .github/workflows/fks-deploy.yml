@@ -283,6 +283,34 @@ jobs:
             echo ""
             echo "✅ Deployment complete!"
 
+      - name: 🔍 Debug failed deploy
+        id: debug-deploy
+        if: failure()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -uo pipefail
+            cd /home/actions/fks
+            echo "=== DOCKER_GID in .env ==="
+            grep "^DOCKER_GID=" .env || echo "(not set)"
+            echo ""
+            echo "=== spawner health status (from docker inspect) ==="
+            docker inspect fks_bot_spawner --format '{{json .State.Health}}' 2>&1 | head -c 2000
+            echo ""
+            echo ""
+            echo "=== spawner container user/groups ==="
+            docker exec fks_bot_spawner id 2>&1 || echo "(exec failed)"
+            echo ""
+            echo "=== docker.sock from inside the container ==="
+            docker exec fks_bot_spawner ls -la /var/run/docker.sock 2>&1 || echo "(exec failed)"
+            echo ""
+            echo "=== last 80 lines of spawner logs ==="
+            docker logs fks_bot_spawner --tail 80 2>&1
+
       - name: 🏥 Run Health Checks
         id: health-checks
         if: always() && steps.deploy.outcome == 'success'

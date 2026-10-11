@@ -230,6 +230,25 @@ jobs:
             docker compose -f docker-compose.oryx.yml up -d --remove-orphans
             echo "✅ Stack started (botsync syncs bots/*.yaml into the spawner)"
 
+            # Sync the fks_user password to .env. The postgres_data volume keeps
+            # the password from its FIRST init; if .env was regenerated since,
+            # the spawner gets "password authentication failed" and runs
+            # stateless. This makes the DB password match .env on every deploy
+            # (idempotent — a no-op when they already match).
+            echo "🔑 Syncing postgres password to .env..."
+            PGPASS=$(grep "^POSTGRES_PASSWORD=" .env | cut -d= -f2-)
+            PGPASS_ESCAPED=$(printf '%s' "$PGPASS" | sed "s/'/''/g")
+            docker exec -u postgres fks_postgres psql -v ON_ERROR_STOP=1 \
+              -c "ALTER USER fks_user WITH PASSWORD '${PGPASS_ESCAPED}';"
+            # Verify TCP+password auth exactly as the spawner does it.
+            docker exec -e PGPASSWORD="$PGPASS" fks_postgres \
+              psql -h localhost -U fks_user -d fks_db -c "SELECT 1;" > /dev/null
+            echo "  ✓ postgres password synced and verified"
+            # The spawner may have gone stateless during its 10 DB retries;
+            # restart it so it connects with the corrected password.
+            docker compose -f docker-compose.oryx.yml restart fks_bot_spawner
+            echo "  ✓ spawner restarted"
+
             # Wait for the spawner, then load Kraken keys into its encrypted
             # secret store. bots/*.yaml declares `secrets: [kraken]`; a spawn
             # fails closed when the store has no kraken credentials.

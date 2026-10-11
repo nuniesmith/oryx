@@ -1,44 +1,41 @@
-# GitHub Secrets for the Oryx deploy
+# GitHub Secrets — oryx repo
 
-These secrets live in the **nuniesmith/oryx** repo → Settings → Secrets and variables → Actions.
-The CI/CD workflow (`ci-cd.yml`) reads them on every deploy. Nothing secret is
-committed to the repo — `.env` on oryx is assembled from these at deploy time.
+Settings → Secrets and variables → Actions. Secrets marked **auto** are
+generated on the host at deploy time when absent (same pattern as the freddy
+deploys); you only need to set the ones marked **manual**.
 
-## Infrastructure (workflow needs these to reach oryx)
+## FKS stack (used by `fks-deploy.yml`)
 
-| Secret | Value | Notes |
+| Secret | Auto? | Purpose |
 |---|---|---|
-| `ORYX_TAILSCALE_IP` | `100.113.72.63` | Oryx's Tailscale IP |
-| `TAILSCALE_OAUTH_CLIENT_ID` | _(from Tailscale admin)_ | Same client used by the freddy/sullivan/princess deploys — reuse it |
-| `TAILSCALE_OAUTH_SECRET` | _(from Tailscale admin)_ | Same secret used by the other host deploys — reuse it |
-| `SSH_PORT` | `22` | |
-| `SSH_USER` | `jordan` | Deploy user (in the `docker` group on oryx) |
-| `SSH_KEY` | _(generated, see below)_ | Private Ed25519 key; its public half is in `/home/jordan/.ssh/authorized_keys` on oryx |
+| `POSTGRES_PASSWORD` | auto | postgres superuser |
+| `REDIS_PASSWORD` | auto | redis requirepass |
+| `QUESTDB_PG_PASSWORD` | auto | questdb pg-wire user |
+| `GRAFANA_PASSWORD` | auto | grafana admin (`GRAFANA_USER=admin`) |
+| `API_KEY` | auto | bearer token for internal HTTP APIs |
+| `JANUS_API_TOKEN` | auto | janus mutating-route bearer token (fail-closed without it) |
+| `NGINX_INTERNAL_TOKEN` | auto | spawner `X-Internal-Token` auth; botsync uses the same value |
+| `EVENTS_TOKEN` | auto | scoped bot→spawner events mailbox token |
+| `SPAWNER_SECRETS_KEY` | auto | 64-hex key encrypting exchange secrets at rest |
+| `DISCORD_WEBHOOK_GENERAL` | manual | alertmanager-discord bridge (general alerts) |
+| `DISCORD_WEBHOOK_SIGNALS` | manual | alertmanager-discord bridge (signal alerts) |
+| `DISCORD_WEBHOOK_ANALYSIS` | manual | alertmanager-discord bridge (analysis alerts) |
+| `DEADMAN_PING_URL` | manual | optional healthchecks.io URL; leave unset and deadman idles |
 
-### SSH_KEY — how it was generated
+The three Discord webhook secrets can reuse the existing Oryx Actions /
+`#crypto` channel webhooks or point at new ones — your call.
 
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/ci-deploy/github_actions_oryx -N '' -C 'github-actions-oryx-deploy'
-cat ~/.ssh/ci-deploy/github_actions_oryx.pub >> ~/.ssh/authorized_keys
-```
+## Already present (reused)
 
-Paste the **private** key (`github_actions_oryx`, `-----BEGIN OPENSSH PRIVATE KEY-----` …)
-into the `SSH_KEY` secret. Keep the public key on oryx; delete any local copy
-of the private key once it's in GitHub.
+| Secret | Used by |
+|---|---|
+| `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | loaded into the spawner's encrypted secret store (`POST /secrets`, exchange `kraken`) at deploy; bot YAMLs declare `secrets: [kraken]` — keys never land in a bot `.env` |
+| `DISCORD_WEBHOOK_URL` | Oryx Actions deploy notifications (unchanged) |
+| `CRYPTO_DISCORD_WEBHOOK_URL` | crypto bot reports (unchanged until the spawner cutover) |
+| `TAILSCALE_OAUTH_CLIENT_ID` / `TAILSCALE_OAUTH_SECRET` | Tailscale connect |
+| `ORYX_TAILSCALE_IP`, `SSH_PORT`, `SSH_USER`, `SSH_KEY` | SSH deploy |
 
-## Application (written into oryx's `.env` for the bot)
+## Variables (optional)
 
-| Secret | Value | Notes |
-|---|---|---|
-| `KRAKEN_API_KEY` | _(your Kraken key)_ | Same key the systemd bot uses today (`~/github/crypto/.env` on oryx) |
-| `KRAKEN_API_SECRET` | _(your Kraken secret)_ | Same secret — never commit it |
-| `DISCORD_WEBHOOK_URL` | _(your webhook URL)_ | Reserved for oryx deployment notifications (kept in `.env`, currently unused by the deploy) |
-| `CRYPTO_DISCORD_WEBHOOK_URL` | _(your webhook URL)_ | **Required for bot reports**; the crypto bot posts startup / daily / weekly / monthly snapshots here. Create a separate Discord webhook for crypto — do not reuse the oryx one |
-
-## Checklist
-
-- [ ] All 6 infrastructure secrets set
-- [ ] `KRAKEN_API_KEY` + `KRAKEN_API_SECRET` set (deploy fails fast without them)
-- [ ] `DISCORD_WEBHOOK_URL` set (reserved for oryx deploys)
-- [ ] `CRYPTO_DISCORD_WEBHOOK_URL` set (bot reports — separate webhook from oryx)
-- [ ] Private deploy key removed from anywhere outside GitHub Secrets
+`JANUS_REF`, `SPAWNER_REF`, `WEB_REF` (repo variables, default `main`) pin
+which git refs the janus / spawner / webui images build from.

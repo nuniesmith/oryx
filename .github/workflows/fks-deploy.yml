@@ -226,15 +226,18 @@ jobs:
             docker compose -f docker-compose.oryx.yml pull
             echo "✅ Images pulled"
 
-            echo "🚀 Starting FKS stack..."
-            docker compose -f docker-compose.oryx.yml up -d --remove-orphans
-            echo "✅ Stack started (botsync syncs bots/*.yaml into the spawner)"
-
-            # Sync the fks_user password to .env. The postgres_data volume keeps
-            # the password from its FIRST init; if .env was regenerated since,
+            # Start postgres first so we can sync its password BEFORE the
+            # spawner boots. The postgres_data volume keeps the fks_user
+            # password from its FIRST init; if .env was regenerated since,
             # the spawner gets "password authentication failed" and runs
-            # stateless. This makes the DB password match .env on every deploy
-            # (idempotent — a no-op when they already match).
+            # stateless. Syncing first avoids a spawner restart (which raced
+            # with botsync). Idempotent — a no-op when they already match.
+            echo "🐘 Starting postgres..."
+            docker compose -f docker-compose.oryx.yml up -d postgres
+            for i in $(seq 1 30); do
+              docker exec fks_postgres pg_isready -U fks_user >/dev/null 2>&1 && break
+              sleep 5
+            done
             echo "🔑 Syncing postgres password to .env..."
             PGPASS=$(grep "^POSTGRES_PASSWORD=" .env | cut -d= -f2-)
             PGPASS_ESCAPED=$(printf '%s' "$PGPASS" | sed "s/'/''/g")
@@ -244,10 +247,10 @@ jobs:
             docker exec -e PGPASSWORD="$PGPASS" fks_postgres \
               psql -h localhost -U fks_user -d fks_db -c "SELECT 1;" > /dev/null
             echo "  ✓ postgres password synced and verified"
-            # The spawner may have gone stateless during its 10 DB retries;
-            # restart it so it connects with the corrected password.
-            docker compose -f docker-compose.oryx.yml restart fks_bot_spawner
-            echo "  ✓ spawner restarted"
+
+            echo "🚀 Starting FKS stack..."
+            docker compose -f docker-compose.oryx.yml up -d --remove-orphans
+            echo "✅ Stack started (botsync syncs bots/*.yaml into the spawner)"
 
             # Wait for the spawner, then load Kraken keys into its encrypted
             # secret store. bots/*.yaml declares `secrets: [kraken]`; a spawn
@@ -352,7 +355,7 @@ jobs:
             }
             FAILED=0
             check "spawner :8091/health" "curl -sf http://127.0.0.1:8091/health"
-            check "nginx :80" "curl -sf http://127.0.0.1:80/ -o /dev/null"
+            check "nginx :80/health" "curl -sf http://127.0.0.1:80/health -o /dev/null"
             check "janus :7000/health" "curl -sf http://127.0.0.1:7000/health"
             check "postgres pg_isready" "docker exec fks_postgres pg_isready -U fks_user"
             check "redis ping" 'docker exec fks_redis redis-cli -a "$(grep ^REDIS_PASSWORD= .env | cut -d= -f2-)" ping | grep -q PONG'

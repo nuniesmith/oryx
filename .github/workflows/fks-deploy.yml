@@ -238,7 +238,7 @@ jobs:
             echo "🔑 Syncing postgres password to .env..."
             PGPASS=$(grep "^POSTGRES_PASSWORD=" .env | cut -d= -f2-)
             PGPASS_ESCAPED=$(printf '%s' "$PGPASS" | sed "s/'/''/g")
-            docker exec -u postgres fks_postgres psql -v ON_ERROR_STOP=1 \
+            docker exec -u postgres fks_postgres psql -U fks_user -v ON_ERROR_STOP=1 \
               -c "ALTER USER fks_user WITH PASSWORD '${PGPASS_ESCAPED}';"
             # Verify TCP+password auth exactly as the spawner does it.
             docker exec -e PGPASSWORD="$PGPASS" fks_postgres \

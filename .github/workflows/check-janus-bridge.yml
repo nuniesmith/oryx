@@ -1,0 +1,61 @@
+# Diagnostic: verify Janus regime-output surfaces on oryx (read-only).
+# Static code analysis says the RegimeBridgeService gRPC server is never
+# started, the janus:regime:bridge Redis stream has no producer, and the
+# QuestDB regime_states writer is never called. This checks the live system:
+#   - TCP connect to the gRPC ports (7002 = regime bridge 50052, 9051 = 50051)
+#   - Janus Prometheus metrics (:9092) — any regime series?
+#   - QuestDB (:9000) — does regime_states exist? row count? latest rows?
+#   - Which symbols appear in Janus ensemble regime log lines?
+#
+# Dispatch manually via "Run workflow".
+
+name: Check Janus bridge surfaces on oryx
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔌 Connect to Tailscale
+        id: tailscale
+        uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          target-ip: ${{ secrets.ORYX_TAILSCALE_IP }}
+          target-ssh-port: ${{ secrets.SSH_PORT || '22' }}
+
+      - name: 🔍 Check Janus regime surfaces on oryx
+        if: steps.tailscale.outputs.connected == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "=== TCP connect: regime bridge gRPC (:7002 -> 50052) ==="
+            timeout 3 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/7002' 2>/dev/null && echo "7002 OPEN" || echo "7002 CLOSED"
+            echo ""
+            echo "=== TCP connect: main gRPC (:9051 -> 50051) ==="
+            timeout 3 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9051' 2>/dev/null && echo "9051 OPEN" || echo "9051 CLOSED"
+            echo ""
+            echo "=== Janus metrics (:9092/metrics) — regime lines ==="
+            curl -s --max-time 10 http://127.0.0.1:9092/metrics | grep -i "regime" | head -20 || echo "NO REGIME METRICS / ENDPOINT FAILED"
+            echo ""
+            echo "=== QuestDB: tables ==="
+            curl -s --max-time 10 "http://127.0.0.1:9000/exec?query=show%20tables" | head -c 1500
+            echo ""
+            echo "=== QuestDB: regime_states count ==="
+            curl -s --max-time 10 "http://127.0.0.1:9000/exec?query=select%20count()%20from%20regime_states" | head -c 800
+            echo ""
+            echo "=== QuestDB: regime_states latest rows ==="
+            curl -s --max-time 10 "http://127.0.0.1:9000/exec?query=select%20*%20from%20regime_states%20latest%20on%20timestamp%20partition%20by%20symbol" | head -c 1500
+            echo ""
+            echo "=== Symbols in Janus ensemble regime log lines (last 24h) ==="
+            docker logs fks_janus --since 24h 2>&1 | grep -i "ensemble regime" | grep -oE "[A-Z]+/USDT" | sort | uniq -c | sort -rn | head -15
+            echo ""
+            echo "=== Any 'bridge' lines in Janus logs (last 24h) ==="
+            docker logs fks_janus --since 24h 2>&1 | grep -i "bridge" | tail -10

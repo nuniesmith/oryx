@@ -16,7 +16,7 @@ jobs:
         uses: nuniesmith/actions/.github/actions/tailscale-connect@main
         with:
           oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-oauth-secret: <redacted>
+          oauth-secret: <redacted>
           target-ip: ${{ secrets.ORYX_TAILSCALE_IP }}
           target-ssh-port: ${{ secrets.SSH_PORT || '22' }}
 

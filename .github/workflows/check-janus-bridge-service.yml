@@ -1,0 +1,47 @@
+# Diagnostic: janus-bridge milestone-1 service health on oryx.
+# Read-only: container state, /data volume contents, samples growth.
+# Dispatch manually via "Run workflow".
+
+name: Check janus-bridge service on oryx
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔌 Connect to Tailscale
+        id: tailscale
+        uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+oauth-secret: <redacted>
+          target-ip: ${{ secrets.ORYX_TAILSCALE_IP }}
+          target-ssh-port: ${{ secrets.SSH_PORT || '22' }}
+
+      - name: 🔍 Inspect janus-bridge on oryx
+        if: steps.tailscale.outputs.connected == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "=== container ==="
+            docker ps --filter "name=fks_janus_bridge" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+            echo "=== health ==="
+            docker inspect fks_janus_bridge --format '{{json .State.Health}}' 2>/dev/null | head -c 500; echo
+            echo "=== /data contents ==="
+            docker exec fks_janus_bridge ls -la /data 2>&1
+            echo "=== samples count (today's file) ==="
+            docker exec fks_janus_bridge sh -c 'f=$(ls /data/samples-*.jsonl 2>/dev/null | tail -1); echo "file: $f"; wc -l "$f" 2>/dev/null'
+            echo "=== newest sample (truncated) ==="
+            docker exec fks_janus_bridge sh -c 'f=$(ls /data/samples-*.jsonl 2>/dev/null | tail -1); tail -1 "$f" 2>/dev/null' | head -c 1200; echo
+            echo "=== bot-state mount readable? ==="
+            docker exec fks_janus_bridge sh -c 'python3 -c "import json; s=json.load(open(\"/bot-state/state.json\")); print(\"regime_bull keys:\", sorted(s.get(\"regime_bull\",{}).keys())); print(\"last_regime_day:\", s.get(\"last_regime_day\"))" 2>&1'
+            echo "=== assessment lines ==="
+            docker exec fks_janus_bridge sh -c 'wc -l /data/assessment.jsonl 2>/dev/null || echo "no assessment.jsonl yet"'
+            echo "=== recent logs ==="
+            docker logs --tail 8 fks_janus_bridge 2>&1

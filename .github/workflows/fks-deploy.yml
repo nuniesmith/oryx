@@ -180,7 +180,12 @@ jobs:
 
             # Non-secret knobs.
             upsert_env COMPOSE_PROJECT_NAME "fks"
-            upsert_env ALLOWED_BOT_IMAGE_PREFIX "ghcr.io/nuniesmith/"
+            # The spawner runs only images under this prefix (a plain starts_with).
+            # "ghcr.io/nuniesmith/" allowed every image published there, infra
+            # and the standalone crypto bot included. Bots and recorders are
+            # published as fks-bot-*; templates replace this with an explicit
+            # list (EDGE_FACTORY_PLAN Phase 1.2).
+            upsert_env ALLOWED_BOT_IMAGE_PREFIX "ghcr.io/nuniesmith/fks-bot-"
             upsert_env REQUIRE_INTERNAL_TOKEN "true"
             upsert_env EXECUTION_MODE "paper_trading"
             # Janus starts its processing services at boot (forward loop,

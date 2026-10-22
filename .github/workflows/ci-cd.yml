@@ -20,6 +20,10 @@ on:
       - "**.md"
       - "docs/**"
       - ".gitignore"
+      # The FKS deploy runs only by dispatch, and a change to it is no reason
+      # to force-recreate crypto-bot-live and btc-recorder: that restarts the
+      # live trader and leaves a gap in the recording.
+      - ".github/workflows/fks-deploy.yml"
   pull_request:
     branches: [main]
   workflow_dispatch:

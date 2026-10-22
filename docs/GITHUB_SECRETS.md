@@ -29,7 +29,7 @@ The three Discord webhook secrets can reuse the existing Oryx Actions /
 
 | Secret | Used by |
 |---|---|
-| `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | loaded into the spawner's encrypted secret store (`POST /secrets`, exchange `kraken`) at deploy; bot YAMLs declare `secrets: [kraken]` — keys never land in a bot `.env` |
+| `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | the standalone `crypto-bot-live` only (`ci-cd.yml`). The FKS deploy no longer touches them (2026-10-22): exchange keys for FKS are entered in its web UI (Settings → Exchange credentials) and stored encrypted in the spawner |
 | `DISCORD_WEBHOOK_URL` | Oryx Actions deploy notifications (unchanged) |
 | `CRYPTO_DISCORD_WEBHOOK_URL` | crypto bot reports (unchanged until the spawner cutover) |
 | `TAILSCALE_OAUTH_CLIENT_ID` / `TAILSCALE_OAUTH_SECRET` | Tailscale connect |

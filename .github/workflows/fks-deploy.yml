@@ -6,7 +6,8 @@
 # Deploys the FULL FKS stack (postgres, redis, questdb, qdrant, janus,
 # spawner, webui, nginx, observability, botsync) from the nuniesmith/fks
 # repo to /home/actions/fks on oryx, then syncs bots/*.yaml into the
-# spawner and loads Kraken keys into its encrypted secret store.
+# spawner. Exchange keys are never deployed: an admin enters them in the FKS
+# web UI (Settings → Exchange credentials), stored encrypted in the spawner.
 #
 # Features:
 #   - Deployment via Tailscale + SSH (same pattern as ci-cd.yml)
@@ -161,10 +162,10 @@ jobs:
             upsert_env DISCORD_WEBHOOK_SIGNALS "${{ secrets.DISCORD_WEBHOOK_SIGNALS }}"
             upsert_env DISCORD_WEBHOOK_ANALYSIS "${{ secrets.DISCORD_WEBHOOK_ANALYSIS }}"
             upsert_env DEADMAN_PING_URL "${{ secrets.DEADMAN_PING_URL }}"
-            # Kraken keys already exist as oryx repo secrets; the spawner loads
-            # them into its encrypted store below (never into a bot .env).
-            upsert_env KRAKEN_API_KEY "${{ secrets.KRAKEN_API_KEY }}"
-            upsert_env KRAKEN_API_SECRET "${{ secrets.KRAKEN_API_SECRET }}"
+            # Exchange keys are entered in the FKS web UI and never deployed
+            # (2026-10-22). Earlier deploys copied the Kraken key in here, and
+            # upsert never removes a line, so take it out.
+            sed -i '/^KRAKEN_API_KEY=/d; /^KRAKEN_API_SECRET=/d' .env
 
             # Service tokens: auto-generate when absent.
             ensure_generated POSTGRES_PASSWORD
@@ -259,39 +260,15 @@ jobs:
             docker compose -f docker-compose.oryx.yml up -d --remove-orphans
             echo "✅ Stack started (botsync syncs bots/*.yaml into the spawner)"
 
-            # Wait for the spawner, then load Kraken keys into its encrypted
-            # secret store. bots/*.yaml declares `secrets: [kraken]`; a spawn
-            # fails closed when the store has no kraken credentials.
-            echo "🔑 Loading Kraken keys into spawner secret store..."
+            # Wait for the spawner. Exchange keys are not loaded here: an admin
+            # enters them in the web UI (Settings → Exchange credentials), and
+            # a bot declaring `secrets: [...]` fails closed until they exist.
+            echo "⏳ Waiting for the spawner..."
             for i in $(seq 1 30); do
               curl -sf http://127.0.0.1:8091/health >/dev/null 2>&1 && break
               sleep 10
             done
             curl -sf http://127.0.0.1:8091/health >/dev/null
-            python3 - <<'EOF'
-            import json, os, urllib.request
-            env = {}
-            with open('.env') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        k, v = line.split('=', 1)
-                        env[k.strip()] = v.strip()
-            token = env.get('NGINX_INTERNAL_TOKEN', '')
-            payload = json.dumps({
-                'exchange': 'kraken',
-                'api_key': env.get('KRAKEN_API_KEY', ''),
-                'api_secret': env.get('KRAKEN_API_SECRET', ''),
-            }).encode()
-            req = urllib.request.Request(
-                'http://127.0.0.1:8091/secrets', data=payload,
-                headers={'Content-Type': 'application/json',
-                         'X-Internal-Token': token})
-            with urllib.request.urlopen(req, timeout=15) as r:
-                body = json.loads(r.read())
-            assert body.get('ok'), f"secret store rejected: {body}"
-            print('  ✓ kraken credentials stored (exchange=kraken)')
-            EOF
 
             echo ""
             echo "📊 Service Status:"
@@ -368,7 +345,9 @@ jobs:
             check "redis ping" 'docker exec fks_redis redis-cli -a "$(grep ^REDIS_PASSWORD= .env | cut -d= -f2-)" ping | grep -q PONG'
             check "botsync exited 0" \
               '[ "$(docker inspect -f "{{.State.ExitCode}}" fks_botsync 2>/dev/null)" = "0" ]'
-            check "kraken creds in store" 'curl -sf -H "X-Internal-Token: $(grep ^NGINX_INTERNAL_TOKEN= .env | cut -d= -f2-)" http://127.0.0.1:8091/secrets/status | grep -q kraken'
+            # /secrets/status answers 200 even without a database
+            # ("db_enabled": false), so assert the store is really there.
+            check "spawner secret store has its database" 'curl -sf -H "X-Internal-Token: $(grep ^NGINX_INTERNAL_TOKEN= .env | cut -d= -f2-)" http://127.0.0.1:8091/secrets/status | grep -q "\"db_enabled\":true"'
 
             if [ "$FAILED" != "0" ]; then
               echo "❌ Health checks FAILED"

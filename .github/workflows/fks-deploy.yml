@@ -158,6 +158,14 @@ jobs:
             upsert_env NGINX_INTERNAL_TOKEN "${{ secrets.NGINX_INTERNAL_TOKEN }}"
             upsert_env EVENTS_TOKEN "${{ secrets.EVENTS_TOKEN }}"
             upsert_env SPAWNER_SECRETS_KEY "${{ secrets.SPAWNER_SECRETS_KEY }}"
+            # Scoped-role DB passwords. Without these, the render carried them
+            # EMPTY: fks-migrate's role setters (009/010/014) skip on empty by
+            # design, so the roles keep whatever password history left them
+            # while the services render an empty one - the webui failed
+            # closed ("Authentication store unavailable", 2026-10-24/25).
+            upsert_env WEBUI_DB_PASSWORD "${{ secrets.WEBUI_DB_PASSWORD }}"
+            upsert_env BACKTEST_DB_PASSWORD "${{ secrets.BACKTEST_DB_PASSWORD }}"
+            upsert_env FUNDING_DB_PASSWORD "${{ secrets.FUNDING_DB_PASSWORD }}"
             upsert_env DISCORD_WEBHOOK_GENERAL "${{ secrets.DISCORD_WEBHOOK_GENERAL }}"
             upsert_env DISCORD_WEBHOOK_SIGNALS "${{ secrets.DISCORD_WEBHOOK_SIGNALS }}"
             upsert_env DISCORD_WEBHOOK_ANALYSIS "${{ secrets.DISCORD_WEBHOOK_ANALYSIS }}"
@@ -177,6 +185,9 @@ jobs:
             ensure_generated NGINX_INTERNAL_TOKEN
             ensure_generated EVENTS_TOKEN
             ensure_generated SPAWNER_SECRETS_KEY
+            ensure_generated WEBUI_DB_PASSWORD
+            ensure_generated BACKTEST_DB_PASSWORD
+            ensure_generated FUNDING_DB_PASSWORD
 
             # Non-secret knobs.
             upsert_env COMPOSE_PROJECT_NAME "fks"

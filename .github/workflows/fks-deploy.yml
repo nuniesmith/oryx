@@ -166,6 +166,12 @@ jobs:
             upsert_env WEBUI_DB_PASSWORD "${{ secrets.WEBUI_DB_PASSWORD }}"
             upsert_env BACKTEST_DB_PASSWORD "${{ secrets.BACKTEST_DB_PASSWORD }}"
             upsert_env FUNDING_DB_PASSWORD "${{ secrets.FUNDING_DB_PASSWORD }}"
+            # The managed crypto bot's #crypto reporting webhook — the
+            # same repo secret the standalone's env used pre-cutover.
+            # botsync expands it into the crypto-regime definition; without
+            # this the managed bot runs with an empty webhook and its
+            # Discord reports silently stop.
+            upsert_env CRYPTO_DISCORD_WEBHOOK_URL "${{ secrets.CRYPTO_DISCORD_WEBHOOK_URL }}"
             upsert_env DISCORD_WEBHOOK_GENERAL "${{ secrets.DISCORD_WEBHOOK_GENERAL }}"
             upsert_env DISCORD_WEBHOOK_SIGNALS "${{ secrets.DISCORD_WEBHOOK_SIGNALS }}"
             upsert_env DISCORD_WEBHOOK_ANALYSIS "${{ secrets.DISCORD_WEBHOOK_ANALYSIS }}"

@@ -1,27 +1,19 @@
-# Docker Compose for ORYX - Crypto Bot host
+# Docker Compose for ORYX
 # ============================================================================
-# Oryx runs the Kraken crypto-bot (daily 200-day MA regime rule) as a Docker
-# service. The image is built by the nuniesmith/crypto repo's CI
-# (docker-publish.yml) and pushed to ghcr.io/nuniesmith/crypto — this host
-# only pulls it, so no Rust toolchain is needed here and deploys are fast.
+# The Kraken crypto-bot RETIRED from this compose 2026-10-25: it runs as
+# the spawner-managed crypto-regime bot in the FKS stack (nuniesmith/fks)
+# and holds the spawner's kraken:spot:default account lease. Do NOT
+# re-add it here — two live bots on one Kraken account is the failure
+# this retirement prevents. Its state directory (./data/crypto-bot) is
+# kept on disk as history.
 #
-# It also runs the BTC market-data recorder (service btc-recorder below).
+# This host runs the BTC market-data recorder (service btc-recorder below).
 # Its image is built the same way by the nuniesmith/btc repo's CI and pushed
 # to ghcr.io/nuniesmith/btc. The recorder uses public Binance market data
 # only — no API keys, no .env entries, no ports.
 #
 # Deploy flow: the oryx CI/CD (triggered by push to oryx main or manual
-# dispatch) runs `docker compose pull` then recreates the container.
-# .env (KRAKEN_API_KEY, KRAKEN_API_SECRET, DISCORD_WEBHOOK_URL) is written by
-# the CI/CD from GitHub Actions secrets on every deploy.
-#
-# First deploy: copy the live state.json from the systemd deploy so order
-# tracking and history carry over:
-#   mkdir -p ./data/crypto-bot/paper
-#   cp ~/github/crypto/data/paper/state.json ./data/crypto-bot/paper/state.json
-# And stop the systemd unit so two bots never trade one account:
-#   systemctl --user stop crypto-bot-live.service
-#   systemctl --user disable crypto-bot-live.service
+# dispatch) runs `docker compose pull` then recreates the containers.
 # ============================================================================
 
 x-logging: &default-logging
@@ -31,31 +23,6 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  crypto-bot:
-    # Prebuilt by crypto CI; the deploy pulls, never builds.
-    image: ghcr.io/nuniesmith/crypto:latest
-    container_name: crypto-bot-live
-    env_file:
-      - .env # KRAKEN_API_KEY, KRAKEN_API_SECRET, DISCORD_WEBHOOK_URL (written by CI/CD)
-    environment:
-      CRYPTO_BOT_ROOT: /app
-      TZ: ${TZ:-America/Toronto}
-    ports:
-      # WebUI: dashboard + forecast calculator (princess proxies crypto.7gram.xyz here).
-      - "8090:8090"
-    volumes:
-      # Bot state (state.json) — bind mount so it survives rebuilds.
-      - ./data/crypto-bot:/app/data
-    logging: *default-logging
-    healthcheck:
-      # WebUI dashboard endpoint.
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/api/status > /dev/null || exit 1"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
-    restart: unless-stopped
-
   btc-recorder:
     # Prebuilt by the btc repo's CI (docker-publish.yml); deploy pulls only.
     # Records Binance BTCUSDT futures streams (forceOrder liquidations,

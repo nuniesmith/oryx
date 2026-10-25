@@ -1,9 +1,10 @@
 # ============================================================================
-# CI/CD Pipeline for ORYX - Crypto Bot host
+# CI/CD Pipeline for ORYX
 # ============================================================================
 # Repository: nuniesmith/oryx
 #
-# Services: crypto-bot (Kraken live-trading bot, daily 200-day MA regime rule)
+# Services: btc-recorder (Binance BTC market-data recorder). The Kraken
+# crypto-bot retired from this repo 2026-10-25 (FKS spawner-managed now).
 #
 # Features:
 #   - Deployment via Tailscale + SSH
@@ -21,8 +22,7 @@ on:
       - "docs/**"
       - ".gitignore"
       # The FKS deploy runs only by dispatch, and a change to it is no reason
-      # to force-recreate crypto-bot-live and btc-recorder: that restarts the
-      # live trader and leaves a gap in the recording.
+      # to force-recreate btc-recorder and leave a gap in the recording.
       - ".github/workflows/fks-deploy.yml"
   pull_request:
     branches: [main]
@@ -134,43 +134,9 @@ jobs:
               git checkout ${{ github.ref_name }}
             fi
 
-            echo "🔐 Setting up .env file..."
-            # Rewrite-by-filter rather than sed: tokens can contain sed's
-            # delimiter characters, and sed only substitutes existing lines.
-            upsert_env() {
-              key="$1"; value="$2"
-              [ -z "$value" ] && return 0
-              grep -v "^${key}=" .env > .env.tmp 2>/dev/null || true
-              printf '%s=%s\n' "$key" "$value" >> .env.tmp
-              mv .env.tmp .env
-              echo "  ✓ ${key} configured"
-            }
-            touch .env
-            upsert_env KRAKEN_API_KEY "${{ secrets.KRAKEN_API_KEY }}"
-            upsert_env KRAKEN_API_SECRET "${{ secrets.KRAKEN_API_SECRET }}"
-            upsert_env DISCORD_WEBHOOK_URL "${{ secrets.DISCORD_WEBHOOK_URL }}"
-            upsert_env CRYPTO_DISCORD_WEBHOOK_URL "${{ secrets.CRYPTO_DISCORD_WEBHOOK_URL }}"
-            upsert_env CRYPTO_BOT_ROOT "/app"
-            chmod 600 .env
-
-            # Verify the bot's secrets made it in — without keys it can only
-            # read public endpoints, never trade.
-            MISSING=""
-            for key in KRAKEN_API_KEY KRAKEN_API_SECRET; do
-              grep -q "^${key}=.\+" .env 2>/dev/null || MISSING="$MISSING $key"
-            done
-            if [ -n "$MISSING" ]; then
-              echo "   ❌ Missing required secrets:$MISSING — set them in GitHub Actions secrets"
-              exit 1
-            fi
-            echo "   ✅ .env ready ($(grep -c '^[A-Z_]' .env) keys)"
-
-            # State directory for the bot's data volume (state.json lives here).
-            # On the very first Docker deploy, copy the live state.json from the
-            # systemd checkout so order tracking carries over — see README.
-            echo "📁 Ensuring bot data directory exists..."
-            mkdir -p ./data/crypto-bot/paper
-            echo "   ✅ data dir ready"
+            # No .env is written anymore: the Kraken bot (its only
+            # consumer) retired to the FKS stack 2026-10-25, and
+            # btc-recorder needs no secrets — public Binance data only.
 
           deploy-command: |
             # Without -e a failed `up` fell through to "✅ Deployment complete",
@@ -182,17 +148,16 @@ jobs:
 
             # Every image must be in hand BEFORE anything stops: a failed pull
             # after the stack is down leaves the host with nothing running.
-            # The image is built by the crypto repo's CI and pushed to GHCR;
-            # this host only pulls it — no Rust toolchain or crypto checkout
-            # needed here.
-            echo "📥 Pulling crypto-bot image..."
+            # Images are built by their repos' CI and pushed to GHCR;
+            # this host only pulls them.
+            echo "📥 Pulling images..."
             docker compose pull
             echo "✅ Image pulled"
 
             echo "🛑 Stopping existing services..."
             docker compose down --remove-orphans 2>/dev/null || true
 
-            echo "🚀 Starting crypto-bot..."
+            echo "🚀 Starting services..."
             docker compose up -d --force-recreate --remove-orphans
 
             echo "✅ Deployment complete"
@@ -203,8 +168,8 @@ jobs:
             echo "📊 Service Status:"
             docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || docker ps --format "table {{.Names}}\t{{.Status}}"
             echo ""
-            echo "📋 Recent bot logs:"
-            docker logs crypto-bot-live --tail 5 2>&1 | tail -5
+            echo "📋 Recent recorder logs:"
+            docker logs btc-recorder --tail 5 2>&1 | tail -5
             echo ""
             echo "✅ Deployment complete!"
 
@@ -216,20 +181,19 @@ jobs:
         if: always() && steps.deploy.outcome == 'success'
         uses: nuniesmith/actions/.github/actions/health-check@main
         with:
-          # The bot exposes no HTTP endpoint; the compose healthcheck asserts
-          # the process is alive (PID 1) and the custom command asserts it is
-          # actually trading (recent Kraken activity in the logs).
-          containers: crypto-bot-live
+          # The recorder's compose healthcheck asserts its status.json
+          # heartbeat is fresh; the custom command re-checks that from the
+          # host and shows recent recorder logs.
+          containers: btc-recorder
           ssh-host: ${{ secrets.ORYX_TAILSCALE_IP }}
           ssh-port: ${{ secrets.SSH_PORT || '22' }}
           ssh-user: ${{ secrets.SSH_USER || 'actions' }}
           ssh-key: ${{ secrets.SSH_KEY }}
-          initial-delay: 150
+          initial-delay: 90
           retry-count: 3
           retry-delay: 20
           fail-on-unhealthy: true
           custom-command: |
             set -e
-            logs=$(docker logs crypto-bot-live --since 10m 2>&1 | tail -20)
-            echo "$logs" | tail -5
-            echo "$logs" | grep -qiE 'starting bot|fetching kraken|regime|ledger'
+            docker inspect btc-recorder --format '{{.State.Health.Status}}' | grep -q healthy
+            docker logs btc-recorder --since 10m 2>&1 | tail -5

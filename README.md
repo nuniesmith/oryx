@@ -9,11 +9,11 @@ repo, this repo only describes how it runs on the box.
 
 | Service | Source repo | What it does |
 |---|---|---|
-| `crypto-bot` | [nuniesmith/crypto](https://github.com/nuniesmith/crypto) | Kraken live-trading bot — daily 200-day MA ±5% regime rule (BTC 44 / ETH 22 / SOL 12 / LINK·XRP·INJ 5% each / 7% cash) |
+| `btc-recorder` | [nuniesmith/btc](https://github.com/nuniesmith/btc) | Binance BTC futures market-data recorder (liquidations, bookTicker, markPrice/funding, OI) |
+| `crypto-bot` | RETIRED 2026-10-25 | The Kraken live-trading bot — now the spawner-managed `crypto-regime` bot in the FKS stack (nuniesmith/fks); removed from this compose so no deploy here can ever run a second trader |
 
-The compose file builds the bot's `Dockerfile` straight from the crypto repo
-(`https://github.com/nuniesmith/crypto.git#main`), so a crypto release is
-picked up on the next oryx deploy with no changes here.
+The crypto bot's state directory (`./data/crypto-bot`) stays on disk as
+history; the bot itself deploys with the FKS stack.
 
 ## Deploy
 

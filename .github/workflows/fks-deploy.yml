@@ -272,6 +272,31 @@ jobs:
               psql -h localhost -U fks_user -d fks_db -c "SELECT 1;" > /dev/null
             echo "  ✓ postgres password synced and verified"
 
+            # The scoped roles (webui/backtest/funding) rotate HERE, not in
+            # the SQL setters: the migration ledger runs each file once,
+            # ever, so 009/010/014 can create a role but can never rotate
+            # its password after the first apply. Align them with .env on
+            # every deploy, beside the fks_user sync above. A role that
+            # does not exist yet (fresh volume - initdb creates it with
+            # this very password) is skipped.
+            echo "Syncing scoped-role passwords to .env..."
+            sync_role_password() {
+              role="$1"; key="$2"
+              val=$(grep "^${key}=" .env | cut -d= -f2-)
+              if [ -z "$val" ]; then echo "  - ${key} empty; ${role} skipped"; return 0; fi
+              if docker exec -u postgres fks_postgres psql -U fks_user -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='${role}'" | grep -q 1; then
+                esc=$(printf '%s' "$val" | sed "s/'/''/g")
+                docker exec -u postgres fks_postgres psql -U fks_user -d postgres -v ON_ERROR_STOP=1 \
+                  -c "ALTER ROLE ${role} WITH LOGIN PASSWORD '${esc}';"
+                echo "  - ${role} password synced"
+              else
+                echo "  - ${role} does not exist yet; initdb/migrate will create it"
+              fi
+            }
+            sync_role_password fks_webui WEBUI_DB_PASSWORD
+            sync_role_password fks_backtest BACKTEST_DB_PASSWORD
+            sync_role_password fks_funding FUNDING_DB_PASSWORD
+
             echo "🚀 Starting FKS stack..."
             docker compose -f docker-compose.oryx.yml up -d --remove-orphans
             echo "✅ Stack started (botsync syncs bots/*.yaml into the spawner)"
@@ -364,6 +389,13 @@ jobs:
             # /secrets/status answers 200 even without a database
             # ("db_enabled": false), so assert the store is really there.
             check "spawner secret store has its database" 'curl -sf -H "X-Internal-Token: $(grep ^NGINX_INTERNAL_TOKEN= .env | cut -d= -f2-)" http://127.0.0.1:8091/secrets/status | grep -q "\"db_enabled\":true"'
+
+            # The webui's scoped role must actually authenticate with the
+            # password .env carries. A green /secrets/status proved nothing
+            # in the 2026-10-24/25 outage: the web UI failed closed behind
+            # passing checks. Assert the positive capability.
+            check "webui db auth (fks_webui)" \
+              'docker run --rm --network fks_network -e PGPASSWORD="$(grep ^WEBUI_DB_PASSWORD= .env | cut -d= -f2-)" postgres:16-alpine psql -h postgres -U fks_webui -d fks_db -tAc "SELECT 1" | grep -q 1'
 
             if [ "$FAILED" != "0" ]; then
               echo "❌ Health checks FAILED"

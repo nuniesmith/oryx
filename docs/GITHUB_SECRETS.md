@@ -30,7 +30,7 @@ The three Discord webhook secrets can reuse the existing Oryx Actions /
 | Secret | Used by |
 |---|---|
 | `KRAKEN_API_KEY` / `KRAKEN_API_SECRET` | RETIRED 2026-10-25 — fed the standalone `crypto-bot-live` only; unused by any workflow since its retirement. Exchange keys for FKS are entered in its web UI (Settings → Exchange credentials) and stored encrypted in the spawner. Kept in GitHub harmlessly |
-| `DISCORD_WEBHOOK_URL` | Oryx Actions deploy notifications (unchanged) |
+| `DISCORD_WEBHOOK_URL` | Oryx Actions deploy notifications, **and the base channel for FKS alerts**: `fks-deploy.yml` writes it as `DISCORD_WEBHOOK_GENERAL` when that secret isn't set (2026-10-27; before that the alert bridge ran DISABLED and dropped every alert). More specific alert channels go in FKS Settings → Notifications |
 | `CRYPTO_DISCORD_WEBHOOK_URL` | crypto bot reports — since the 2026-10-25 cutover it feeds the FKS deploy (`fks-deploy.yml`), which upserts it into the FKS .env for botsync to expand into the managed bot's config |
 | `TAILSCALE_OAUTH_CLIENT_ID` / `TAILSCALE_OAUTH_SECRET` | Tailscale connect |
 | `ORYX_TAILSCALE_IP`, `SSH_PORT`, `SSH_USER`, `SSH_KEY` | SSH deploy |

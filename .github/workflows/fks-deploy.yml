@@ -166,19 +166,7 @@ jobs:
             upsert_env WEBUI_DB_PASSWORD "${{ secrets.WEBUI_DB_PASSWORD }}"
             upsert_env BACKTEST_DB_PASSWORD "${{ secrets.BACKTEST_DB_PASSWORD }}"
             upsert_env FUNDING_DB_PASSWORD "${{ secrets.FUNDING_DB_PASSWORD }}"
-            # The managed crypto bot's #crypto reporting webhook — the
-            # same repo secret the standalone's env used pre-cutover.
-            # botsync expands it into the crypto-regime definition; without
-            # this the managed bot runs with an empty webhook and its
-            # Discord reports silently stop.
-            upsert_env CRYPTO_DISCORD_WEBHOOK_URL "${{ secrets.CRYPTO_DISCORD_WEBHOOK_URL }}"
-            # FKS alerts (Alertmanager -> fks_alertmanager_discord). With no
-            # GENERAL webhook the bridge ran in DISABLED mode and dropped
-            # every alert (found 2026-10-27; the secret never existed), so it
-            # falls back to the base DISCORD_WEBHOOK_URL. SIGNALS/ANALYSIS fall
-            # back to GENERAL inside the bridge. Finer routing goes in FKS
-            # Settings -> Notifications, not in more secrets here.
-            upsert_env DISCORD_WEBHOOK_GENERAL "${{ secrets.DISCORD_WEBHOOK_GENERAL || secrets.DISCORD_WEBHOOK_URL }}"
+            upsert_env DISCORD_WEBHOOK_GENERAL "${{ secrets.DISCORD_WEBHOOK_GENERAL }}"
             upsert_env DISCORD_WEBHOOK_SIGNALS "${{ secrets.DISCORD_WEBHOOK_SIGNALS }}"
             upsert_env DISCORD_WEBHOOK_ANALYSIS "${{ secrets.DISCORD_WEBHOOK_ANALYSIS }}"
             upsert_env DEADMAN_PING_URL "${{ secrets.DEADMAN_PING_URL }}"
@@ -186,6 +174,11 @@ jobs:
             # (2026-10-22). Earlier deploys copied the Kraken key in here, and
             # upsert never removes a line, so take it out.
             sed -i '/^KRAKEN_API_KEY=/d; /^KRAKEN_API_SECRET=/d' .env
+            # The crypto bot's #crypto webhook moved to FKS Settings ->
+            # Notifications (channel `crypto`, set into the bot at spawn; fks
+            # #323). The old value was printed by GET /configs once, so it
+            # leaves .env too rather than lingering as a stale line.
+            sed -i '/^CRYPTO_DISCORD_WEBHOOK_URL=/d' .env
 
             # Service tokens: auto-generate when absent.
             ensure_generated POSTGRES_PASSWORD

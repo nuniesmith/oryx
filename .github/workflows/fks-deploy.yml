@@ -172,7 +172,13 @@ jobs:
             # this the managed bot runs with an empty webhook and its
             # Discord reports silently stop.
             upsert_env CRYPTO_DISCORD_WEBHOOK_URL "${{ secrets.CRYPTO_DISCORD_WEBHOOK_URL }}"
-            upsert_env DISCORD_WEBHOOK_GENERAL "${{ secrets.DISCORD_WEBHOOK_GENERAL }}"
+            # FKS alerts (Alertmanager -> fks_alertmanager_discord). With no
+            # GENERAL webhook the bridge ran in DISABLED mode and dropped
+            # every alert (found 2026-10-27; the secret never existed), so it
+            # falls back to the base DISCORD_WEBHOOK_URL. SIGNALS/ANALYSIS fall
+            # back to GENERAL inside the bridge. Finer routing goes in FKS
+            # Settings -> Notifications, not in more secrets here.
+            upsert_env DISCORD_WEBHOOK_GENERAL "${{ secrets.DISCORD_WEBHOOK_GENERAL || secrets.DISCORD_WEBHOOK_URL }}"
             upsert_env DISCORD_WEBHOOK_SIGNALS "${{ secrets.DISCORD_WEBHOOK_SIGNALS }}"
             upsert_env DISCORD_WEBHOOK_ANALYSIS "${{ secrets.DISCORD_WEBHOOK_ANALYSIS }}"
             upsert_env DEADMAN_PING_URL "${{ secrets.DEADMAN_PING_URL }}"

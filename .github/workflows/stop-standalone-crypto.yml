@@ -4,7 +4,8 @@
 # same account. Idempotent — safe to run multiple times.
 #
 # Dispatch manually via "Run workflow". Does NOT remove the service from
-# docker-compose.yml (kept as a stopped rollback option).
+# docker-compose.yml (kept as a stopped rollback option). docker-compose.yml
+# itself was removed 2026-11-05 with btc-recorder.
 
 name: Stop standalone crypto bot
 

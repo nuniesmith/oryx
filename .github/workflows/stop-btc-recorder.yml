@@ -1,0 +1,56 @@
+# One-off: stop the standalone btc-recorder container on oryx.
+#
+# The FKS platform's `btc` recorder (spawner template recorder.binance-usdm,
+# lake /srv/fks-lake/raw/binance/usdm/btc) has recorded beside it since
+# 2026-10-26. EDGE_FACTORY_PLAN §5.5's comparison passed on 2026-11-05 over
+# 10-27..11-04: liquidations (forceOrder) identical every day, 9,373 of
+# 9,373; markPrice within 125 messages a day; bookTicker >= 98.4% shared.
+# The standalone's pre-lake history (10-14..10-25) was copied into the lake
+# with sha256 verification (_legacy_import_btc-recorder.jsonl beside it).
+#
+# Stops the container and turns off its restart policy. The container and
+# ./data/btc-recorder stay on disk: the data is the original of the copied
+# history. Idempotent — safe to run more than once.
+
+name: Stop standalone btc-recorder
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stop-recorder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔌 Connect to Tailscale
+        id: tailscale
+        uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          target-ip: ${{ secrets.ORYX_TAILSCALE_IP }}
+          target-ssh-port: ${{ secrets.SSH_PORT || '22' }}
+
+      - name: 🛑 Stop btc-recorder on oryx
+        if: steps.tailscale.outputs.connected == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORYX_TAILSCALE_IP }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER || 'actions' }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -u
+            # Refuse unless the platform recorder is up: stopping the old one
+            # with nothing else recording would leave a hole in the tape.
+            if ! docker ps --filter name=^fks-bot-btc$ --filter health=healthy --format '{{.Names}}' | grep -qx fks-bot-btc; then
+              echo "❌ fks-bot-btc is not running and healthy; leaving btc-recorder alone"
+              exit 1
+            fi
+            echo "🛑 Stopping standalone btc-recorder (if running)..."
+            docker update --restart=no btc-recorder 2>/dev/null || true
+            docker stop btc-recorder 2>/dev/null && echo "  ✓ stopped" || echo "  (not running)"
+            echo "📋 Recorder containers now:"
+            docker ps -a --filter "name=recorder" --filter "name=fks-bot-btc" --format "{{.Names}}: {{.Status}}"

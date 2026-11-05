@@ -10,7 +10,7 @@
 # web UI (Settings → Exchange credentials), stored encrypted in the spawner.
 #
 # Features:
-#   - Deployment via Tailscale + SSH (same pattern as ci-cd.yml)
+#   - Deployment via Tailscale + SSH (same pattern as the retired ci-cd.yml)
 #   - .env assembled from GitHub Actions secrets on every deploy;
 #     service tokens auto-generate if missing (freddy pattern)
 #   - Independent cadence from the crypto-bot deploys
